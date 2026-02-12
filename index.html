@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tasty Corner System</title>
+
+<style>
+body {
+  font-family: Arial;
+  margin:0;
+  background:#f4f6f9;
+}
+
+header {
+  background:#ff7f00;
+  color:white;
+  padding:15px;
+  text-align:center;
+  font-size:22px;
+  font-weight:bold;
+}
+
+.container {
+  display:flex;
+}
+
+.left {
+  width:70%;
+  padding:20px;
+}
+
+.right {
+  width:30%;
+  background:white;
+  padding:20px;
+  border-left:2px solid #ddd;
+}
+
+#categories button {
+  margin:5px;
+  padding:8px 15px;
+  border:none;
+  background:#ff7f00;
+  color:white;
+  cursor:pointer;
+  border-radius:5px;
+}
+
+.product-card {
+  background:white;
+  padding:10px;
+  margin:10px;
+  border-radius:8px;
+  display:inline-block;
+  width:160px;
+  text-align:center;
+  box-shadow:0 2px 5px rgba(0,0,0,0.1);
+}
+
+.product-card button {
+  margin-top:5px;
+  padding:5px 10px;
+  background:green;
+  color:white;
+  border:none;
+  border-radius:5px;
+  cursor:pointer;
+}
+
+.cart-item {
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:8px;
+}
+
+.remove-btn {
+  color:red;
+  font-weight:bold;
+  cursor:pointer;
+  margin-left:10px;
+}
+
+.total {
+  font-size:18px;
+  font-weight:bold;
+  margin-top:15px;
+}
+
+button.action {
+  width:100%;
+  padding:10px;
+  margin-top:10px;
+  border:none;
+  color:white;
+  font-weight:bold;
+  border-radius:5px;
+  cursor:pointer;
+}
+
+.checkout { background:#007bff; }
+.clear { background:red; }
+
+@media print {
+  body * { visibility:hidden; }
+  #receipt, #receipt * { visibility:visible; }
+  #receipt {
+    position:absolute;
+    left:0;
+    top:0;
+    width:100%;
+    padding:20px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<header>Tasty Corner System</header>
+
+<div class="container">
+
+<div class="left">
+  <div id="categories"></div>
+  <div id="products"></div>
+</div>
+
+<div class="right">
+  <h3>Cart</h3>
+  <div id="cart"></div>
+  <div class="total">Total: $<span id="total">0</span></div>
+  <button class="action checkout" onclick="checkout()">Checkout</button>
+  <button class="action clear" onclick="clearCart()">Clear Cart</button>
+</div>
+
+</div>
+
+<div id="receipt" style="display:none;"></div>
+
+<script>
+
+const PRODUCTS_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTAdtysm2dZkiywQOeJbf2FFvsDjp1aBOxIC7cmvCOw5SVCmT2YXPgU7DQrGwypTEc4PYjwX4NrKMou/pub?gid=0&single=true&output=csv";
+
+let cart = [];
+let total = 0;
+let productsList = [];
+let orderCounter = 1;
+
+// Load products
+fetch(PRODUCTS_CSV)
+.then(res => res.text())
+.then(text => {
+  let rows = text.trim().split("\n").slice(1);
+  productsList = rows.map(row => {
+    let cols = row.split(",");
+    return {
+      ID: cols[0]?.trim(),
+      Name: cols[1]?.trim(),
+      Price: parseFloat(cols[2]),
+      Category: cols[3]?.trim(),
+      Active: cols[4]?.trim()
+    };
+  });
+  createCategoryButtons(productsList);
+});
+
+// Create category buttons
+function createCategoryButtons(products) {
+  let categories = [...new Set(products.map(p => p.Category))];
+  let container = document.getElementById("categories");
+
+  categories.forEach(cat => {
+    let btn = document.createElement("button");
+    btn.innerText = cat;
+    btn.onclick = () => displayProducts(products, cat);
+    container.appendChild(btn);
+  });
+}
+
+// Display products
+function displayProducts(products, category) {
+  let container = document.getElementById("products");
+  container.innerHTML = "";
+
+  let filtered = products.filter(p =>
+    p.Category === category &&
+    p.Active.toUpperCase() === "TRUE"
+  );
+
+  filtered.forEach(product => {
+    let div = document.createElement("div");
+    div.className = "product-card";
+    div.innerHTML = `
+      <h4>${product.Name}</h4>
+      <p>$${product.Price}</p>
+      <button onclick="addToCart('${product.Name}', ${product.Price})">Add</button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+// Add to cart
+function addToCart(name, price) {
+  let existing = cart.find(item => item.name === name);
+  if (existing) {
+    existing.quantity++;
+  } else {
+    cart.push({ name, price, quantity:1 });
+  }
+  updateCart();
+}
+
+// Remove single product
+function removeFromCart(name) {
+  cart = cart.filter(item => item.name !== name);
+  updateCart();
+}
+
+// Update cart UI
+function updateCart() {
+  let cartDiv = document.getElementById("cart");
+  cartDiv.innerHTML = "";
+  total = 0;
+
+  cart.forEach(item => {
+    total += item.price * item.quantity;
+    cartDiv.innerHTML += `
+      <div class="cart-item">
+        <div>
+          ${item.name} x${item.quantity} - $${item.price * item.quantity}
+        </div>
+        <div class="remove-btn" onclick="removeFromCart('${item.name}')">X</div>
+      </div>
+    `;
+  });
+
+  document.getElementById("total").innerText = total;
+}
+
+// Clear cart
+function clearCart() {
+  cart = [];
+  total = 0;
+  updateCart();
+}
+
+// Checkout
+function checkout() {
+  if (cart.length === 0) {
+    alert("Cart is empty!");
+    return;
+  }
+
+  let orderId = orderCounter;
+  orderCounter++;
+
+  printReceipt(orderId, [...cart]);
+  clearCart();
+}
+
+// Print receipt
+function printReceipt(orderId, items) {
+  let receipt = document.getElementById("receipt");
+
+  let html = `
+    <div style="width:350px; margin:auto; font-size:20px;">
+      <h1 style="text-align:center;">Tasty Corner</h1>
+      <p style="text-align:center;">Order No: ${orderId}</p>
+      <hr>
+  `;
+
+  items.forEach(item => {
+    html += `
+      <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+        <span>${item.name} x${item.quantity}</span>
+        <span>$${item.price * item.quantity}</span>
+      </div>
+    `;
+  });
+
+  html += `
+      <hr>
+      <h2 style="text-align:center;">Total: $${total}</h2>
+    </div>
+  `;
+
+  receipt.innerHTML = html;
+  receipt.style.display = "block";
+
+  window.print();
+
+  receipt.style.display = "none";
+}
+
+</script>
+
+</body>
+</html>
